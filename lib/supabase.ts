@@ -28,10 +28,11 @@ export const getSupabaseConfig = () => {
     return { url: storedUrl, key: storedKey };
   }
 
-  // 3. Fallback a variables de entorno (si las configuraste en Vercel)
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
-    return { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_KEY };
-  }
+  // 3. Fallback a variables de entorno (si las configuraste en Netlify)
+// En Vite usamos import.meta.env en lugar de process.env
+if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_KEY) {
+  return { url: import.meta.env.VITE_SUPABASE_URL, key: import.meta.env.VITE_SUPABASE_KEY };
+}
 
   return null;
 };
