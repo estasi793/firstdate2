@@ -19,6 +19,7 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null); // State for lightbox
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +93,23 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 max-w-md mx-auto relative">
+      {/* Lightbox Modal for Images */}
+      {enlargedImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-2 animate-fade-in-up"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <button className="absolute top-4 right-4 text-white p-2 bg-slate-800 rounded-full z-50">✕</button>
+          <img 
+            src={enlargedImage} 
+            className="max-w-full max-h-full object-contain rounded-lg" 
+            alt="Ampliada"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+            onContextMenu={(e) => e.preventDefault()} // Disable right click
+          />
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-slate-800 p-4 flex items-center gap-4 border-b border-slate-700 shadow-lg z-10">
         <button onClick={onBack} className="text-slate-400 hover:text-white">
@@ -138,7 +156,17 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                      
                      {isImage ? (
                         msg.attachmentUrl ? (
-                          <img src={msg.attachmentUrl} className="rounded-lg max-h-48 w-full object-cover" alt="adjunto" />
+                          <div className="relative group cursor-pointer" onClick={() => setEnlargedImage(msg.attachmentUrl || null)}>
+                            <img 
+                              src={msg.attachmentUrl} 
+                              className="rounded-lg max-h-48 w-full object-cover border border-white/10" 
+                              alt="adjunto" 
+                              onContextMenu={(e) => e.preventDefault()}
+                            />
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                              <span className="text-xs font-bold text-white bg-black/50 px-2 py-1 rounded-full">🔍 Ampliar</span>
+                            </div>
+                          </div>
                         ) : <span className="italic opacity-70">Subiendo foto...</span>
                      ) : (
                        // Detectar enlaces (como whatsapp)
@@ -163,7 +191,7 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           
           {/* Tools Menu */}
           {showTools && (
-            <div className="absolute bottom-20 left-4 bg-slate-700 rounded-xl shadow-xl p-2 flex flex-col gap-2 animate-fade-in-up mb-2">
+            <div className="absolute bottom-20 left-4 bg-slate-700 rounded-xl shadow-xl p-2 flex flex-col gap-2 animate-fade-in-up mb-2 z-20">
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 hover:bg-slate-600 rounded-lg text-white">
                 <span>📷</span> Enviar Foto
               </button>

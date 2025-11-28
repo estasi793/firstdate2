@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -11,6 +12,11 @@ export const ProfileSetup: React.FC = () => {
   const [bio, setBio] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Camera States
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -18,9 +24,59 @@ export const ProfileSetup: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhoto(reader.result as string);
+        setIsCameraOpen(false); // Close camera if file is uploaded
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const startCamera = async () => {
+    setIsCameraOpen(true);
+    setPhoto(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      alert("No se pudo acceder a la cámara. Por favor, verifica los permisos.");
+      setIsCameraOpen(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      // Set canvas dimensions to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const context = canvas.getContext('2d');
+      if (context) {
+        // Flip horizontally for "mirror" effect like a selfie
+        context.translate(canvas.width, 0);
+        context.scale(-1, 1);
+        
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        setPhoto(dataUrl);
+        
+        // Stop camera stream
+        const stream = video.srcObject as MediaStream;
+        stream?.getTracks().forEach(track => track.stop());
+        setIsCameraOpen(false);
+      }
+    }
+  };
+
+  const closeCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setIsCameraOpen(false);
   };
 
   const handleGenerateBio = async () => {
@@ -60,22 +116,79 @@ export const ProfileSetup: React.FC = () => {
             required
           />
 
-          {/* Photo Upload */}
+          {/* Photo Section */}
           <div className="space-y-2">
             <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider">Tu Foto (Obligatorio)</label>
-            <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer hover:border-pink-500 hover:bg-slate-800/50 transition-all overflow-hidden group">
-                {photo ? (
-                  <img src={photo} alt="Vista previa" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <svg className="w-8 h-8 mb-2 text-slate-500 group-hover:text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                    <p className="text-sm text-slate-500">Toca para subir</p>
+            
+            {!isCameraOpen ? (
+              <div className="flex flex-col gap-3">
+                {/* Preview Area */}
+                <div className="flex items-center justify-center w-full">
+                  <div className="relative w-full h-48 border-2 border-slate-700 border-dashed rounded-xl overflow-hidden bg-slate-800/50 flex flex-col items-center justify-center group">
+                    {photo ? (
+                      <>
+                        <img src={photo} alt="Vista previa" className="w-full h-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => setPhoto(null)}
+                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white font-bold"
+                        >
+                          Cambiar Foto
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-center p-4">
+                        <svg className="w-10 h-10 mx-auto text-slate-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <p className="text-sm text-slate-500">Sin foto seleccionada</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} required={!photo} />
-              </label>
-            </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-700 transition-all text-sm font-bold text-white">
+                    <span>📁</span> Galería
+                    <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                  </label>
+                  <button 
+                    type="button" 
+                    onClick={startCamera}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl hover:bg-slate-700 transition-all text-sm font-bold text-white"
+                  >
+                    <span>📸</span> Cámara
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Camera View */
+              <div className="relative w-full bg-black rounded-xl overflow-hidden">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  className="w-full h-64 object-cover transform scale-x-[-1]" // Mirror effect
+                />
+                <canvas ref={canvasRef} className="hidden" />
+                
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 px-4">
+                  <button 
+                    type="button" 
+                    onClick={closeCamera}
+                    className="px-4 py-2 bg-red-500/80 text-white rounded-full text-xs font-bold backdrop-blur-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={capturePhoto}
+                    className="px-6 py-2 bg-white text-black rounded-full text-xs font-bold shadow-lg"
+                  >
+                    Capturar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* AI Bio Generator */}
