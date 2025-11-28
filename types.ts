@@ -1,3 +1,4 @@
+
 export interface User {
   id: number; // The "Number" (e.g., 39)
   name: string;
@@ -11,6 +12,8 @@ export interface Message {
   senderId: number;
   receiverId: number;
   text: string;
+  type?: 'text' | 'image' | 'dedication'; // Nuevo: Tipo de mensaje
+  attachmentUrl?: string; // Nuevo: URL de la imagen
   timestamp: number;
 }
 
