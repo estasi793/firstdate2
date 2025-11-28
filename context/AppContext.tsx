@@ -245,16 +245,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const status = accept ? 'accepted' : 'rejected';
     
-    // Buscar el ID del registro en la tabla matches
-    const matchRecord = matchRequests.find(m => m.fromId === fromId && m.toId === currentUser.id);
-    if (!matchRecord) return;
-
-    // Actualizar en DB. Usamos una query directa asumiendo que solo hay uno pendiente
-    await supabase
+    // 1. Actualización Optimista (UI responde al instante)
+    setMatchRequests(prev => prev.map(m => {
+      if (m.fromId === fromId && m.toId === currentUser.id) {
+        return { ...m, status: status as any };
+      }
+      return m;
+    }));
+    
+    // 2. Actualizar en DB
+    const { error } = await supabase
       .from('matches')
       .update({ status: status })
       .eq('from_id', fromId)
       .eq('to_id', currentUser.id);
+
+    if (error) console.error("Error al responder match:", error);
   };
 
   const sendMessage = async (toId: number, text: string) => {

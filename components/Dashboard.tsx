@@ -46,6 +46,17 @@ export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ 
     }
   };
 
+  const handleAcceptLike = (fromId: number) => {
+    // 1. Actualizar DB y Estado
+    respondToLike(fromId, true);
+    
+    // 2. Guardar a quién vamos a hablar (para que el Chat se abra en este usuario)
+    localStorage.setItem('neonmatch_open_chat', fromId.toString());
+    
+    // 3. Ir al chat inmediatamente
+    onViewChange('chat');
+  };
+
   const getPartnerId = (req: any) => req.fromId === currentUser.id ? req.toId : req.fromId;
 
   // GENERACIÓN DE URL MÁGICA
@@ -210,7 +221,7 @@ export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ 
                     ✕
                   </button>
                   <button 
-                    onClick={() => respondToLike(req.fromId, true)}
+                    onClick={() => handleAcceptLike(req.fromId)}
                     className="w-8 h-8 rounded-full bg-pink-500 text-white hover:bg-pink-600 flex items-center justify-center shadow-lg shadow-pink-500/30 transition-colors"
                   >
                     ✓

@@ -5,7 +5,17 @@ import { getWingmanSuggestion } from '../services/geminiService';
 
 export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, matches, allUsers, messages, sendMessage } = useApp();
-  const [activePartnerId, setActivePartnerId] = useState<number | null>(null);
+  
+  // Inicializar con el chat guardado si venimos de aceptar un like
+  const [activePartnerId, setActivePartnerId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('neonmatch_open_chat');
+    if (stored) {
+      localStorage.removeItem('neonmatch_open_chat'); // Limpiar para que no se abra siempre el mismo
+      return parseInt(stored);
+    }
+    return null;
+  });
+
   const [inputText, setInputText] = useState('');
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
@@ -13,7 +23,7 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const getPartnerId = (req: any) => req.fromId === currentUser?.id ? req.toId : req.fromId;
 
-  // Auto-select first match if none selected
+  // Auto-select first match if none selected and no intent stored
   useEffect(() => {
     if (!activePartnerId && matches.length > 0) {
       setActivePartnerId(getPartnerId(matches[0]));
@@ -148,7 +158,7 @@ export const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                {isGettingSuggestion ? (
                  <span className="animate-spin block">✨</span>
                ) : (
-                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8 8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-8 8 3.59 8 8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
                )}
              </button>
              <input 
