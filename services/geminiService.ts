@@ -1,14 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// En Vite, las variables de entorno se acceden vía import.meta.env
+// Usamos 'as any' para evitar errores de TypeScript si no están definidos los tipos
+const apiKey = (import.meta as any).env?.VITE_API_KEY || '';
 
-export const hasApiKey = (): boolean => !!process.env.API_KEY;
+const ai = new GoogleGenAI({ apiKey: apiKey });
+
+export const hasApiKey = (): boolean => !!apiKey;
 
 /**
  * Generates a creative bio based on user keywords (Spanish).
  */
 export const generateBio = async (name: string, traits: string): Promise<string> => {
-  if (!process.env.API_KEY) return "API Key faltante. Me gustan los paseos por la playa.";
+  if (!apiKey) return "API Key faltante. Me gustan los paseos por la playa.";
 
   try {
     const prompt = `Escribe una biografía corta, ingeniosa y misteriosa para una app de citas (máx 150 caracteres) para una persona llamada ${name}. 
@@ -37,7 +41,7 @@ export const getWingmanSuggestion = async (
   partnerBio: string,
   lastMessages: { sender: string; text: string }[]
 ): Promise<string> => {
-  if (!process.env.API_KEY) return "¿Hola, qué tal la noche?";
+  if (!apiKey) return "¿Hola, qué tal la noche?";
 
   try {
     const context = lastMessages.map(m => `${m.sender}: ${m.text}`).join('\n');
