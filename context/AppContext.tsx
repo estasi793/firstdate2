@@ -50,7 +50,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem(SESSION_USER_ID_KEY);
-    // Forzar recarga para limpiar estados de memoria
     window.location.reload();
   };
 
@@ -124,7 +123,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, (payload: any) => {
         if (payload.new && payload.new.key === 'event_status') {
            setEventStatus(payload.new.value as EventStatus);
-           // Si se cierra el evento, echar a la gente que esté en registro
            if (payload.new.value === 'closed' && !localStorage.getItem(SESSION_USER_ID_KEY)) {
              window.location.reload();
            }
@@ -175,26 +173,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetEvent = async () => {
     if (!supabase) return;
     setIsLoading(true);
-    // Borrar todo
-    await supabase.from('messages').delete().neq('id', 0);
-    await supabase.from('matches').delete().neq('id', 0);
-    await supabase.from('users').delete().neq('id', 0);
     
-    // Forzar logout a todos
+    // 1. Echar a todos antes de borrar
     await kickAllUsers();
     
-    // Resetear estado local
+    // 2. Intentar usar la función de base de datos para reinicio TOTAL (IDs a 1)
+    const { error } = await supabase.rpc('reset_event');
+    
+    if (error) {
+      console.warn("Función 'reset_event' no encontrada en Supabase. Borrando manualmente (IDs no se reiniciarán a 1).", error);
+      // Fallback: Borrado manual (no reinicia contador)
+      await supabase.from('messages').delete().neq('id', 0);
+      await supabase.from('matches').delete().neq('id', 0);
+      await supabase.from('users').delete().neq('id', 0);
+    }
+    
+    // 3. Limpiar estado local
     setAllUsers([]);
     setMatchRequests([]);
     setMessages([]);
     setCurrentUser(null);
     setIsLoading(false);
-    alert("Evento reiniciado y usuarios desconectados.");
+    
+    // Recargar para limpiar todo
+    window.location.reload();
   };
 
   const kickAllUsers = async () => {
     if (!supabase) return;
-    // Enviar señal de broadcast a todos los navegadores conectados
     await supabase.channel('global_commands').send({
       type: 'broadcast',
       event: 'force_logout',
@@ -228,7 +234,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser || !supabase) return;
     const status = accept ? 'accepted' : 'rejected';
     
-    // Optimistic UI update
     setMatchRequests(prev => prev.map(m => {
       if (m.fromId === fromId && m.toId === currentUser.id) return { ...m, status: status as any };
       return m;
@@ -263,7 +268,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: Date.now()
     };
 
-    // Optimistic Update
     setMessages(prev => [...prev, newMsg]);
 
     const { data } = await supabase.from('messages').insert([{

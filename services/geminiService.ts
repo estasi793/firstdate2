@@ -12,7 +12,8 @@ export const hasApiKey = (): boolean => !!apiKey;
  * Generates a creative bio based on user keywords (Spanish).
  */
 export const generateBio = async (name: string, traits: string): Promise<string> => {
-  if (!apiKey) return "API Key faltante. Me gustan los paseos por la playa.";
+  // Si no hay API Key, devolvemos una bio genérica divertida en lugar de un error técnico
+  if (!apiKey) return "Me gusta la fiesta y conocer gente nueva. ¡Pregúntame!";
 
   try {
     const prompt = `Escribe una biografía corta, ingeniosa y misteriosa para una app de citas (máx 150 caracteres) para una persona llamada ${name}. 
@@ -29,7 +30,8 @@ export const generateBio = async (name: string, traits: string): Promise<string>
     return response.text?.trim() || "Listo para bailar toda la noche.";
   } catch (error) {
     console.error("Gemini Bio Error:", error);
-    return "Solo estoy aquí por la música.";
+    // Fallback silencioso en caso de error
+    return "Solo estoy aquí por la música y la buena compañía.";
   }
 };
 
@@ -41,7 +43,7 @@ export const getWingmanSuggestion = async (
   partnerBio: string,
   lastMessages: { sender: string; text: string }[]
 ): Promise<string> => {
-  if (!apiKey) return "¿Hola, qué tal la noche?";
+  if (!apiKey) return "¿Qué te cuentas?";
 
   try {
     const context = lastMessages.map(m => `${m.sender}: ${m.text}`).join('\n');
