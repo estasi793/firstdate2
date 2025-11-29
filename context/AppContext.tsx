@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, MatchRequest, Message } from '../types';
 import { createSupabaseClient, getSupabaseConfig, saveSupabaseConfig } from '../lib/supabase';
@@ -18,7 +17,7 @@ interface AppContextType {
   sendMessage: (toId: number, text: string, type?: 'text'|'image'|'dedication', file?: File) => Promise<void>;
   loginAsUser: (id: number) => Promise<boolean>;
   logout: () => void;
-  resetServer: () => Promise<void>;
+  resetEvent: () => Promise<void>; // Nueva función Admin
   configureServer: (url: string, key: string) => void;
 }
 
@@ -101,7 +100,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, (payload: any) => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload: any) => {
         const newMsg = payload.new;
-        // Evitar duplicados si ya lo añadimos con actualización optimista
         setMessages(prev => {
            if (prev.some(m => m.id === newMsg.id.toString())) return prev;
            return [...prev, {
@@ -140,7 +138,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem(SESSION_USER_ID_KEY);
   };
 
-  const resetServer = async () => {};
+  // FUNCIÓN DE ADMIN: Borrar todo y reiniciar evento
+  const resetEvent = async () => {
+    if (!supabase) return;
+    setIsLoading(true);
+    // Borrar en orden inverso por las claves foráneas (mensajes -> matches -> usuarios)
+    await supabase.from('messages').delete().neq('id', 0);
+    await supabase.from('matches').delete().neq('id', 0);
+    await supabase.from('users').delete().neq('id', 0);
+    
+    // Resetear estado local
+    setAllUsers([]);
+    setMatchRequests([]);
+    setMessages([]);
+    logout();
+    setIsLoading(false);
+    alert("Evento reiniciado. Todos los datos han sido borrados.");
+  };
 
   const sendLike = async (targetId: number): Promise<{ success: boolean; message: string }> => {
     if (!currentUser || !supabase) return { success: false, message: 'Error de conexión' };
@@ -160,7 +174,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser || !supabase) return;
     const status = accept ? 'accepted' : 'rejected';
     
-    // Actualización Optimista
     setMatchRequests(prev => prev.map(m => {
       if (m.fromId === fromId && m.toId === currentUser.id) return { ...m, status: status as any };
       return m;
@@ -174,13 +187,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let attachmentUrl = null;
 
-    // Subir imagen si existe
     if (file && type === 'image') {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const { data, error } = await supabase.storage.from('chat-images').upload(fileName, file);
       
       if (!error && data) {
-         // Obtener URL pública
          const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(fileName);
          attachmentUrl = urlData.publicUrl;
       }
@@ -197,10 +208,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: Date.now()
     };
 
-    // 1. Actualización Optimista (Mostrar ya en pantalla)
     setMessages(prev => [...prev, newMsg]);
 
-    // 2. Enviar a DB
     const { data, error } = await supabase.from('messages').insert([{
       sender_id: currentUser.id,
       receiver_id: toId,
@@ -209,7 +218,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       attachment_url: attachmentUrl
     }]).select().single();
     
-    // 3. Si se insertó bien, reemplazamos el ID temporal
     if (data) {
        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id.toString() } : m));
     }
@@ -221,7 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       currentUser, allUsers, incomingLikes, matches, messages, isLoading, isConfigured,
-      register, sendLike, respondToLike, sendMessage, loginAsUser, logout, resetServer, configureServer
+      register, sendLike, respondToLike, sendMessage, loginAsUser, logout, resetEvent, configureServer
     }}>
       {children}
     </AppContext.Provider>

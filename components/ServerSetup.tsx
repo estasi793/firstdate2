@@ -7,46 +7,72 @@ export const ServerSetup: React.FC = () => {
   const { configureServer } = useApp();
   const [url, setUrl] = useState('');
   const [key, setKey] = useState('');
+  const [isAdminMode, setIsAdminMode] = useState(false);
 
   const handleSave = () => {
     if (url && key) {
-      // Usar la función del contexto para que la app se actualice al instante
       configureServer(url, key);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-950">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl">
-        <h1 className="text-2xl font-black text-white mb-2">Conectar Servidor</h1>
-        <p className="text-slate-400 mb-6 text-sm">
-          Para que todos los usuarios se vean entre sí, necesitamos conectar una base de datos.
-        </p>
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl text-center">
+        
+        {/* Vista para Invitados (Por defecto) */}
+        {!isAdminMode ? (
+          <div className="space-y-6">
+            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-600">
+              NeonMatch
+            </h1>
+            <p className="text-white text-lg font-medium">
+              ¡Bienvenido a la Fiesta!
+            </p>
+            <div className="bg-slate-800 p-4 rounded-xl text-slate-300 text-sm">
+              <p className="mb-2">👋 <b>¿Eres un invitado?</b></p>
+              <p>Por favor, escanea el <b>Código QR</b> que hay en el local o pide el enlace de invitación.</p>
+              <p className="mt-2 text-xs opacity-50">Así entrarás automáticamente sin configurar nada.</p>
+            </div>
+            
+            <div className="pt-8">
+               <button 
+                 onClick={() => setIsAdminMode(true)} 
+                 className="text-xs text-slate-700 hover:text-slate-500 underline"
+               >
+                 Soy el Organizador (Admin)
+               </button>
+            </div>
+          </div>
+        ) : (
+          /* Vista de Admin (Solo tú la ves si pulsas el botón) */
+          <div className="space-y-4 text-left">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white">Configuración Admin</h2>
+              <button onClick={() => setIsAdminMode(false)} className="text-xs text-red-400">Cancelar</button>
+            </div>
+            
+            <p className="text-slate-400 text-xs mb-4">
+              Introduce las claves de Supabase para activar el sistema.
+            </p>
 
-        <ol className="list-decimal list-inside text-xs text-slate-500 mb-6 space-y-2">
-          <li>Crea proyecto en <a href="https://supabase.com" target="_blank" className="text-pink-500 underline">supabase.com</a></li>
-          <li>Ejecuta el script SQL en el editor.</li>
-          <li>Copia la URL y la Anon Key de los ajustes.</li>
-        </ol>
-
-        <div className="space-y-4">
-          <Input 
-            label="Project URL" 
-            placeholder="https://xyz.supabase.co"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-          <Input 
-            label="API Key (Anon/Public)" 
-            type="password"
-            placeholder="eyJh..."
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-          />
-          <Button onClick={handleSave} disabled={!url || !key}>
-            Conectar Discoteca
-          </Button>
-        </div>
+            <Input 
+              label="Project URL" 
+              placeholder="https://xyz.supabase.co"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <Input 
+              label="API Key (Anon/Public)" 
+              type="password"
+              placeholder="eyJh..."
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+            />
+            <Button onClick={handleSave} disabled={!url || !key}>
+              Conectar Discoteca
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

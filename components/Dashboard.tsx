@@ -1,15 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Button } from './Button';
 import { Input } from './Input';
-import { getSupabaseConfig } from '../lib/supabase';
+import { getSupabaseConfig, generateInviteCode } from '../lib/supabase';
 
 export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ onViewChange }) => {
-  const { currentUser, sendLike, incomingLikes, respondToLike, matches, logout, allUsers } = useApp();
+  const { currentUser, sendLike, incomingLikes, respondToLike, matches, logout, allUsers, resetEvent } = useApp();
   const [targetId, setTargetId] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
   const [baseUrlOverride, setBaseUrlOverride] = useState('');
 
@@ -42,13 +42,25 @@ export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ 
     onViewChange('chat');
   };
 
+  const handleResetEvent = async () => {
+    if (window.confirm("⚠️ ¿ESTÁS SEGURO?\n\nEsto borrará TODOS los usuarios, matches y mensajes.\n\nEsta acción NO se puede deshacer. Úsala solo al terminar la fiesta.")) {
+      await resetEvent();
+    }
+  };
+
   const getPartnerId = (req: any) => req.fromId === currentUser.id ? req.toId : req.fromId;
   const config = getSupabaseConfig();
   const cleanBaseUrl = baseUrlOverride.replace(/\/$/, '');
-  const magicLink = `${cleanBaseUrl}?sbUrl=${encodeURIComponent(config?.url || '')}&sbKey=${encodeURIComponent(config?.key || '')}`;
+  
+  // Generar código de invitación encriptado
+  const inviteCode = config ? generateInviteCode(config.url, config.key) : '';
+  const magicLink = `${cleanBaseUrl}?invite=${encodeURIComponent(inviteCode)}`;
+  
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(magicLink)}`;
 
-  const shareViaWhatsApp = () => window.open(`https://wa.me/?text=${encodeURIComponent(`¡Únete a la fiesta en NeonMatch! Entra aquí: ${magicLink}`)}`, '_blank');
+  // Enlace para WhatsApp (automático)
+  const whatsappMessage = `¡Únete a la fiesta! 🥂 Escanea o pulsa aquí para entrar y conseguir tu número: ${magicLink}`;
+  const shareViaWhatsApp = () => window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`, '_blank');
   const copyToClipboard = () => { navigator.clipboard.writeText(magicLink); alert("¡Enlace copiado!"); };
 
   return (
@@ -74,20 +86,27 @@ export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ 
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl space-y-6 text-center my-auto">
              <button onClick={() => setShowInviteModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full p-1">✕</button>
              <h3 className="text-xl font-black text-slate-900">¡Invita a la Fiesta!</h3>
-             <div className="text-left bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                <p className="text-[10px] font-bold text-yellow-700 uppercase mb-1">⚠️ Importante:</p>
-                <p className="text-xs text-yellow-800">Si estás en casa, cambia <b>localhost</b> por tu IP.</p>
-             </div>
+             
              <div className="text-left">
-                <label className="text-xs font-bold text-slate-400 uppercase">Dirección Web</label>
+                <label className="text-xs font-bold text-slate-400 uppercase">Dirección Web (Opcional)</label>
                 <input className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 font-mono mt-1" value={baseUrlOverride} onChange={(e) => setBaseUrlOverride(e.target.value)} />
              </div>
+             
              <div className="bg-slate-100 p-4 rounded-xl inline-block mx-auto border-4 border-slate-900">
                <img src={qrImageUrl} alt="QR Invitación" className="w-48 h-48 mix-blend-multiply" />
              </div>
+             
+             <p className="text-xs text-slate-500">
+               Este código configura automáticamente la app en el móvil del invitado.
+             </p>
+
              <div className="space-y-3">
-               <button onClick={shareViaWhatsApp} className="w-full py-3 rounded-xl font-bold bg-[#25D366] text-white">Enviar por WhatsApp</button>
-               <button onClick={copyToClipboard} className="w-full py-3 rounded-xl font-bold text-slate-600 bg-slate-200">Copiar Enlace</button>
+               <button onClick={shareViaWhatsApp} className="w-full py-3 rounded-xl font-bold bg-[#25D366] text-white flex items-center justify-center gap-2">
+                 <span>📲</span> Enviar por WhatsApp
+               </button>
+               <button onClick={copyToClipboard} className="w-full py-3 rounded-xl font-bold text-slate-600 bg-slate-200">
+                 Copiar Enlace
+               </button>
              </div>
           </div>
         </div>
@@ -154,8 +173,24 @@ export const Dashboard: React.FC<{ onViewChange: (view: 'chat') => void }> = ({ 
         )}
       </div>
 
-      <div className="pt-8 text-center">
-        <button onClick={logout} className="text-slate-500 text-sm hover:text-white underline">Cerrar Sesión</button>
+      <div className="pt-8 pb-8 text-center border-t border-slate-800 mt-8">
+        <button onClick={logout} className="text-slate-500 text-sm hover:text-white underline mb-4 block w-full">Cerrar Sesión</button>
+        
+        {/* Zona Admin Oculta */}
+        {!isAdminPanelOpen ? (
+           <button onClick={() => setIsAdminPanelOpen(true)} className="text-[10px] text-slate-800 hover:text-slate-700">Admin</button>
+        ) : (
+           <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 mt-4">
+              <p className="text-red-400 font-bold text-xs mb-2 uppercase">Zona Peligrosa (Admin)</p>
+              <button 
+                onClick={handleResetEvent} 
+                className="w-full py-2 bg-red-600 text-white font-bold rounded-lg text-xs hover:bg-red-700"
+              >
+                ⚠️ REINICIAR EVENTO (Borrar Todo)
+              </button>
+              <button onClick={() => setIsAdminPanelOpen(false)} className="mt-2 text-slate-500 text-xs">Cerrar</button>
+           </div>
+        )}
       </div>
     </div>
   );
