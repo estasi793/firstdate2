@@ -12,8 +12,8 @@ export interface Message {
   senderId: number;
   receiverId: number;
   text: string;
-  type?: 'text' | 'image' | 'dedication'; // Nuevo: Tipo de mensaje
-  attachmentUrl?: string; // Nuevo: URL de la imagen
+  type?: 'text' | 'image' | 'dedication';
+  attachmentUrl?: string;
   timestamp: number;
 }
 
@@ -26,10 +26,4 @@ export interface MatchRequest {
 
 export type AppView = 'onboarding' | 'dashboard' | 'chat';
 
-export interface ChatSession {
-  partnerId: number;
-  partnerName: string;
-  partnerPhoto: string | null;
-  lastMessage: string;
-  timestamp: number;
-}
+export type EventStatus = 'open' | 'closed';

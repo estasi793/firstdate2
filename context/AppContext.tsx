@@ -1,5 +1,6 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, MatchRequest, Message } from '../types';
+import { User, MatchRequest, Message, EventStatus } from '../types';
 import { createSupabaseClient, getSupabaseConfig, saveSupabaseConfig } from '../lib/supabase';
 
 interface AppContextType {
@@ -10,15 +11,19 @@ interface AppContextType {
   messages: Message[];
   isLoading: boolean;
   isConfigured: boolean;
+  eventStatus: EventStatus;
   
   register: (name: string, bio: string, photoUrl: string | null) => Promise<void>;
   sendLike: (targetId: number) => Promise<{ success: boolean; message: string }>;
   respondToLike: (fromId: number, accept: boolean) => Promise<void>;
   sendMessage: (toId: number, text: string, type?: 'text'|'image'|'dedication', file?: File) => Promise<void>;
-  loginAsUser: (id: number) => Promise<boolean>;
   logout: () => void;
-  resetEvent: () => Promise<void>; // Nueva función Admin
   configureServer: (url: string, key: string) => void;
+  
+  // Admin Functions
+  resetEvent: () => Promise<void>;
+  kickAllUsers: () => Promise<void>;
+  toggleEventStatus: (status: EventStatus) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -33,6 +38,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfigured, setIsConfigured] = useState(!!getSupabaseConfig());
+  const [eventStatus, setEventStatus] = useState<EventStatus>('open');
 
   const configureServer = (url: string, key: string) => {
     saveSupabaseConfig(url.trim(), key.trim());
@@ -41,12 +47,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsConfigured(!!newClient);
   };
 
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(SESSION_USER_ID_KEY);
+    // Forzar recarga para limpiar estados de memoria
+    window.location.reload();
+  };
+
   useEffect(() => {
     if (!supabase) return;
 
     const fetchData = async () => {
-      setIsLoading(true);
-      
+      // 1. Cargar Estado del Evento
+      const { data: settings } = await supabase.from('system_settings').select('*').eq('key', 'event_status').single();
+      if (settings) setEventStatus(settings.value as EventStatus);
+
+      // 2. Cargar Usuarios
       const { data: usersData } = await supabase.from('users').select('*').order('id', { ascending: true });
       if (usersData) {
         const mappedUsers = usersData.map((u: any) => ({
@@ -65,20 +81,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // 3. Cargar Matches
       const { data: matchesData } = await supabase.from('matches').select('*');
       if (matchesData) {
-        const mappedMatches = matchesData.map((m: any) => ({
+        setMatchRequests(matchesData.map((m: any) => ({
           fromId: m.from_id,
           toId: m.to_id,
           status: m.status,
           timestamp: m.timestamp
-        }));
-        setMatchRequests(mappedMatches);
+        })));
       }
 
+      // 4. Cargar Mensajes
       const { data: msgData } = await supabase.from('messages').select('*').order('timestamp', { ascending: true });
       if (msgData) {
-        const mappedMsgs = msgData.map((m: any) => ({
+        setMessages(msgData.map((m: any) => ({
           id: m.id.toString(),
           senderId: m.sender_id,
           receiverId: m.receiver_id,
@@ -86,18 +103,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           type: m.type || 'text',
           attachmentUrl: m.attachment_url,
           timestamp: m.timestamp
-        }));
-        setMessages(mappedMsgs);
+        })));
       }
-
-      setIsLoading(false);
     };
 
     fetchData();
 
-    const channel = supabase.channel('public_db_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload: any) => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, (payload: any) => fetchData())
+    // CANAL DE COMANDOS GLOBALES (ADMIN KICK)
+    const commandChannel = supabase.channel('global_commands')
+      .on('broadcast', { event: 'force_logout' }, () => {
+        console.log("Admin ha forzado el cierre de sesión");
+        logout();
+      })
+      .subscribe();
+
+    // CANAL DE CAMBIOS EN BASE DE DATOS
+    const dbChannel = supabase.channel('public_db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, (payload: any) => {
+        if (payload.new && payload.new.key === 'event_status') {
+           setEventStatus(payload.new.value as EventStatus);
+           // Si se cierra el evento, echar a la gente que esté en registro
+           if (payload.new.value === 'closed' && !localStorage.getItem(SESSION_USER_ID_KEY)) {
+             window.location.reload();
+           }
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload: any) => {
         const newMsg = payload.new;
         setMessages(prev => {
@@ -115,13 +147,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      supabase.removeChannel(commandChannel);
+      supabase.removeChannel(dbChannel); 
+    };
   }, [supabase]);
 
   const register = async (name: string, bio: string, photoUrl: string | null) => {
     if (!supabase) return;
+    if (eventStatus === 'closed') {
+      alert("El evento está cerrado. No se admiten nuevos registros.");
+      return;
+    }
     setIsLoading(true);
-    const { data, error } = await supabase.from('users').insert([{ name, bio, photo_url: photoUrl }]).select().single();
+    const { data } = await supabase.from('users').insert([{ name, bio, photo_url: photoUrl }]).select().single();
     if (data) {
       const newUser: User = { id: data.id, name: data.name, bio: data.bio, photoUrl: data.photo_url, joinedAt: data.joined_at };
       setAllUsers(prev => [...prev, newUser]);
@@ -131,30 +170,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsLoading(false);
   };
 
-  const loginAsUser = async (id: number): Promise<boolean> => { return false; };
+  // --- ADMIN FUNCTIONS ---
 
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem(SESSION_USER_ID_KEY);
-  };
-
-  // FUNCIÓN DE ADMIN: Borrar todo y reiniciar evento
   const resetEvent = async () => {
     if (!supabase) return;
     setIsLoading(true);
-    // Borrar en orden inverso por las claves foráneas (mensajes -> matches -> usuarios)
+    // Borrar todo
     await supabase.from('messages').delete().neq('id', 0);
     await supabase.from('matches').delete().neq('id', 0);
     await supabase.from('users').delete().neq('id', 0);
+    
+    // Forzar logout a todos
+    await kickAllUsers();
     
     // Resetear estado local
     setAllUsers([]);
     setMatchRequests([]);
     setMessages([]);
-    logout();
+    setCurrentUser(null);
     setIsLoading(false);
-    alert("Evento reiniciado. Todos los datos han sido borrados.");
+    alert("Evento reiniciado y usuarios desconectados.");
   };
+
+  const kickAllUsers = async () => {
+    if (!supabase) return;
+    // Enviar señal de broadcast a todos los navegadores conectados
+    await supabase.channel('global_commands').send({
+      type: 'broadcast',
+      event: 'force_logout',
+      payload: {}
+    });
+  };
+
+  const toggleEventStatus = async (status: EventStatus) => {
+    if (!supabase) return;
+    await supabase.from('system_settings').upsert({ key: 'event_status', value: status });
+    setEventStatus(status);
+  };
+
+  // --- STANDARD FUNCTIONS ---
 
   const sendLike = async (targetId: number): Promise<{ success: boolean; message: string }> => {
     if (!currentUser || !supabase) return { success: false, message: 'Error de conexión' };
@@ -174,6 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser || !supabase) return;
     const status = accept ? 'accepted' : 'rejected';
     
+    // Optimistic UI update
     setMatchRequests(prev => prev.map(m => {
       if (m.fromId === fromId && m.toId === currentUser.id) return { ...m, status: status as any };
       return m;
@@ -208,9 +263,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: Date.now()
     };
 
+    // Optimistic Update
     setMessages(prev => [...prev, newMsg]);
 
-    const { data, error } = await supabase.from('messages').insert([{
+    const { data } = await supabase.from('messages').insert([{
       sender_id: currentUser.id,
       receiver_id: toId,
       text: text,
@@ -228,8 +284,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      currentUser, allUsers, incomingLikes, matches, messages, isLoading, isConfigured,
-      register, sendLike, respondToLike, sendMessage, loginAsUser, logout, resetEvent, configureServer
+      currentUser, allUsers, incomingLikes, matches, messages, isLoading, isConfigured, eventStatus,
+      register, sendLike, respondToLike, sendMessage, logout, resetEvent, configureServer, kickAllUsers, toggleEventStatus
     }}>
       {children}
     </AppContext.Provider>
